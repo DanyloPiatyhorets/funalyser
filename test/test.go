@@ -14,7 +14,17 @@ func main() {
 
     func greet(name string) string {
         return "Hello, " + name
-    }`
+    }
+
+    func haveLoop() {
+        for i := 0; i < 10; i++ {
+            fmt.Println(i)
+            for j := 0; j < 10; j++ {
+                fmt.Println(j)
+            }
+        }
+    }    
+    `
 
     fset := token.NewFileSet()
     file, err := parser.ParseFile(fset, "", src, parser.AllErrors)

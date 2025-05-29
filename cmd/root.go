@@ -6,9 +6,9 @@ import (
 )
 
 var rootCmd = &cobra.Command{
-    Use:   "funanalyser",
+    Use:   "funalyser",
     Short: "A CLI tool to analyze functions in Go source code",
-    Long:  `funanalyser analyzes Go files to extract function-level insights.`,
+    Long:  `funalyser analyzes Go files to extract function-level insights.`,
 }
 
 func Execute() {
