@@ -10,8 +10,15 @@ var analyseCmd = &cobra.Command{
     Use:   "analyse [file.go]",
     Short: "Analyse functions in a Go source file",
     Args:  cobra.ExactArgs(1),
-    Run: func(cmd *cobra.Command, args []string) {
-        functions, err := parser.ExtractFunctions(args[0])
+    Run: analyse,
+}
+
+func init() {
+    rootCmd.AddCommand(analyseCmd)
+}
+
+func analyse(cmd *cobra.Command, args []string){
+	functions, err := parser.ExtractFunctions(args[0])
         if err != nil {
             fmt.Println("Error:", err)
             return
@@ -19,10 +26,5 @@ var analyseCmd = &cobra.Command{
         for _, fn := range functions {
             fmt.Printf("Function: %s (Lines %d–%d)\n", fn.Name, fn.StartLine, fn.EndLine)
         }
-    },
-}
-
-func init() {
-    rootCmd.AddCommand(analyseCmd)
 }
 
