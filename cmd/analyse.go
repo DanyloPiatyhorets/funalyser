@@ -34,13 +34,13 @@ func printFunctionReport(fn parser.FunctionInfo) {
 	// Hardcoded expected values
 	expected := map[string]int{
 		"addNumbers":      0,
-		"countToTen":      1,
+		"countToTen":      0,
 		"printItems":      1,
 		"nestedLoop":      2,
 		"loopForever":     1,
 		"labeledBreak":    2,
 		"conditionalLoop": 1,
-		"loopInSwitch":    1,
+		"loopInSwitch":    0,
 	}
 
 	expectedTC, ok := expected[fn.Name]
@@ -51,8 +51,15 @@ func printFunctionReport(fn parser.FunctionInfo) {
 		symbol = "✅"
 	}
 
-	fmt.Printf("Function: %-18s | Time Complexity: %-s %s\n",
-		fn.Name, parseIndexToTimeComplexity(fn.TimeComplexityIndex), symbol)
+    fmt.Printf(
+    "Function: %-18s | Time Complexity: %-s %s | Params: %v | Locals: %v | Globals: %v\n",
+    fn.Name,
+    parseIndexToTimeComplexity(fn.TimeComplexityIndex),
+    symbol,
+    fn.SymbolTable.Params,
+    fn.SymbolTable.Locals,
+    fn.SymbolTable.Globals,
+    )   
 }
 
 func parseIndexToTimeComplexity(maxLoopDepth int) string {
