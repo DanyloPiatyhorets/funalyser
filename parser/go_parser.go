@@ -22,6 +22,10 @@ type SymbolTable struct {
     Globals []string
 }
 
+type Analyser struct {
+    Globals []string
+}
+
 func Process(filePath string) ([]FunctionInfo, error) {
 	src, err := os.ReadFile(filePath)
 	if err != nil {
@@ -29,36 +33,51 @@ func Process(filePath string) ([]FunctionInfo, error) {
 	}
 
 	fset := token.NewFileSet()
-    // file, err := parser.ParseFile(fset, "", src, parser.AllErrors)
+    file, err := parser.ParseFile(fset, "", src, parser.AllErrors)
 	node, err := parser.ParseFile(fset, filePath, src, parser.AllErrors)
 	if err != nil {
 		return nil, err
 	}
-    // ast.Print(fset, file)
+    ast.Print(fset, file)
 
 
 	var funcs []FunctionInfo
     var funcSymbolTable SymbolTable
+    var analyser Analyser
+
+    for _, decl := range file.Decls {
+        if gen, ok := decl.(*ast.GenDecl); ok {
+            for _, spec := range gen.Specs {
+                if valSpec, ok := spec.(*ast.ValueSpec); ok {
+                    for _, identifier := range valSpec.Names {
+                                analyser.Globals = append(analyser.Globals, identifier.Name)
+                    }
+                }
+            }
+        }
+    }
 
 	ast.Inspect(node, func(node ast.Node) bool {
-		currentFunction, isFunction := node.(*ast.FuncDecl) // this is a current node
-		if isFunction {
+        
+        switch decl := node.(type) {
+        case *ast.FuncDecl:
+            funcSymbolTable = analyser.getSymbolTableForFunction(decl)
+			pos := fset.Position(decl.Pos())
+			end := fset.Position(decl.End())
 
-            funcSymbolTable = getSymbolTableForFunction(currentFunction)
-			pos := fset.Position(currentFunction.Pos())
-			end := fset.Position(currentFunction.End())
-
-			var funcStmtList []ast.Stmt = currentFunction.Body.List
+			var funcStmtList []ast.Stmt = decl.Body.List
 			var timeComplexityIndex int = getMaxLoopDepth(funcStmtList, funcSymbolTable, 0, 0)
 
 			funcs = append(funcs, FunctionInfo{
-				Name:                currentFunction.Name.Name,
+				Name:                decl.Name.Name,
                 SymbolTable: funcSymbolTable,
 				TimeComplexityIndex: timeComplexityIndex,
 				StartLine:           pos.Line,
 				EndLine:             end.Line,
 			})
-		}
+        
+        }
+
 		return true
 	})
 
@@ -93,8 +112,12 @@ func getMaxLoopDepth(currentBodyList []ast.Stmt, funcSymbolTable SymbolTable, ma
 	return maxDepth
 }
 
-func getSymbolTableForFunction(function *ast.FuncDecl) SymbolTable {
-    var symbolTable SymbolTable
+func (analyser *Analyser) getSymbolTableForFunction(function *ast.FuncDecl) SymbolTable {
+    // var symbolTable SymbolTable
+    symbolTable := SymbolTable{
+        Globals: analyser.Globals, 
+    }   
+
 
     // add parameters from the function AST
     for _, params := range function.Type.Params.List {
@@ -112,7 +135,7 @@ func getSymbolTableForFunction(function *ast.FuncDecl) SymbolTable {
             }
         }
     }
-    // add short variable declarations (assignments) from the function AST
+    // add variable declarations from the function AST
     for _, stmt := range function.Body.List {
         if declStmt, ok := stmt.(*ast.DeclStmt); ok {
             if genDecl, ok := declStmt.Decl.(*ast.GenDecl); ok && genDecl.Tok == token.VAR {
