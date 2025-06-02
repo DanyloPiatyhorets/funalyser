@@ -12,8 +12,6 @@ type FunctionInfo struct {
 	Name                string
 	TimeComplexityIndex int
     SymbolTable         SymbolTable
-	StartLine           int
-	EndLine             int
 }
 
 type SymbolTable struct {
@@ -38,7 +36,7 @@ func Process(filePath string) ([]FunctionInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-    ast.Print(fset, file)
+    // ast.Print(fset, file)
 
 
 	var funcs []FunctionInfo
@@ -62,8 +60,6 @@ func Process(filePath string) ([]FunctionInfo, error) {
         switch decl := node.(type) {
         case *ast.FuncDecl:
             funcSymbolTable = analyser.getSymbolTableForFunction(decl)
-			pos := fset.Position(decl.Pos())
-			end := fset.Position(decl.End())
 
 			var funcStmtList []ast.Stmt = decl.Body.List
 			var timeComplexityIndex int = getMaxLoopDepth(funcStmtList, funcSymbolTable, 0, 0)
@@ -72,8 +68,6 @@ func Process(filePath string) ([]FunctionInfo, error) {
 				Name:                decl.Name.Name,
                 SymbolTable: funcSymbolTable,
 				TimeComplexityIndex: timeComplexityIndex,
-				StartLine:           pos.Line,
-				EndLine:             end.Line,
 			})
         
         }
@@ -88,8 +82,17 @@ func getMaxLoopDepth(currentBodyList []ast.Stmt, funcSymbolTable SymbolTable, ma
 	maxDepth = int(math.Max(float64(currentDepth), float64(maxDepth)))
 	for _, stmt := range currentBodyList {
 		switch stmtType := stmt.(type) {
-		case *ast.ForStmt:
-			maxDepth = getMaxLoopDepth(stmtType.Body.List, funcSymbolTable, maxDepth, currentDepth+1)
+        case *ast.ForStmt:
+            condExpr, ok := stmtType.Cond.(*ast.BinaryExpr)
+            if !ok {
+                return 0
+            }
+            switch condExpr.Y.(type) {
+            case *ast.BasicLit:
+                maxDepth = getMaxLoopDepth(stmtType.Body.List, funcSymbolTable, maxDepth, currentDepth)
+            case *ast.Ident:
+                maxDepth = getMaxLoopDepth(stmtType.Body.List, funcSymbolTable, maxDepth, currentDepth+1)
+            }
 		case *ast.RangeStmt:
 			maxDepth = getMaxLoopDepth(stmtType.Body.List, funcSymbolTable, maxDepth, currentDepth+1)
 		case *ast.LabeledStmt:
@@ -112,12 +115,12 @@ func getMaxLoopDepth(currentBodyList []ast.Stmt, funcSymbolTable SymbolTable, ma
 	return maxDepth
 }
 
+
 func (analyser *Analyser) getSymbolTableForFunction(function *ast.FuncDecl) SymbolTable {
     // var symbolTable SymbolTable
     symbolTable := SymbolTable{
         Globals: analyser.Globals, 
     }   
-
 
     // add parameters from the function AST
     for _, params := range function.Type.Params.List {
