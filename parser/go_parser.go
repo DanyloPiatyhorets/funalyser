@@ -1,44 +1,157 @@
 package parser
 
 import (
-    "go/ast"
-    "go/parser"
-    "go/token"
-    "os"
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"math"
+	"os"
 )
 
 type FunctionInfo struct {
-    Name      string
-    StartLine int
-    EndLine   int
+	Name                string
+	TimeComplexityIndex int
+    SymbolTable         SymbolTable
 }
 
-func ExtractFunctions(filePath string) ([]FunctionInfo, error) {
-    src, err := os.ReadFile(filePath)
-    if err != nil {
-        return nil, err
-    }
+type SymbolTable struct {
+    Locals []string
+    Params []string
+    Globals []string
+}
 
-    fset := token.NewFileSet()
-    node, err := parser.ParseFile(fset, filePath, src, parser.AllErrors)
-    if err != nil {
-        return nil, err
-    }
+type Analyser struct {
+    Globals []string
+}
 
-    var funcs []FunctionInfo
-    ast.Inspect(node, func(n ast.Node) bool {
-        fn, ok := n.(*ast.FuncDecl)
-        if ok {
-            pos := fset.Position(fn.Pos())
-            end := fset.Position(fn.End())
-            funcs = append(funcs, FunctionInfo{
-                Name:      fn.Name.Name,
-                StartLine: pos.Line,
-                EndLine:   end.Line,
-            })
+func Process(filePath string) ([]FunctionInfo, error) {
+	src, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, err
+	}
+
+	fset := token.NewFileSet()
+    file, err := parser.ParseFile(fset, "", src, parser.AllErrors)
+	node, err := parser.ParseFile(fset, filePath, src, parser.AllErrors)
+	if err != nil {
+		return nil, err
+	}
+    // ast.Print(fset, file)
+
+
+	var funcs []FunctionInfo
+    var funcSymbolTable SymbolTable
+    var analyser Analyser
+
+    for _, decl := range file.Decls {
+        if gen, ok := decl.(*ast.GenDecl); ok {
+            for _, spec := range gen.Specs {
+                if valSpec, ok := spec.(*ast.ValueSpec); ok {
+                    for _, identifier := range valSpec.Names {
+                                analyser.Globals = append(analyser.Globals, identifier.Name)
+                    }
+                }
+            }
         }
-        return true
-    })
+    }
 
-    return funcs, nil
+	ast.Inspect(node, func(node ast.Node) bool {
+        
+        switch decl := node.(type) {
+        case *ast.FuncDecl:
+            funcSymbolTable = analyser.getSymbolTableForFunction(decl)
+
+			var funcStmtList []ast.Stmt = decl.Body.List
+			var timeComplexityIndex int = getMaxLoopDepth(funcStmtList, funcSymbolTable, 0, 0)
+
+			funcs = append(funcs, FunctionInfo{
+				Name:                decl.Name.Name,
+                SymbolTable: funcSymbolTable,
+				TimeComplexityIndex: timeComplexityIndex,
+			})
+        
+        }
+
+		return true
+	})
+
+	return funcs, nil
+}
+
+func getMaxLoopDepth(currentBodyList []ast.Stmt, funcSymbolTable SymbolTable, maxDepth int, currentDepth int) int {
+	maxDepth = int(math.Max(float64(currentDepth), float64(maxDepth)))
+	for _, stmt := range currentBodyList {
+		switch stmtType := stmt.(type) {
+        case *ast.ForStmt:
+            condExpr, ok := stmtType.Cond.(*ast.BinaryExpr)
+            if !ok {
+                return 0
+            }
+            switch condExpr.Y.(type) {
+            case *ast.BasicLit:
+                maxDepth = getMaxLoopDepth(stmtType.Body.List, funcSymbolTable, maxDepth, currentDepth)
+            case *ast.Ident:
+                maxDepth = getMaxLoopDepth(stmtType.Body.List, funcSymbolTable, maxDepth, currentDepth+1)
+            }
+		case *ast.RangeStmt:
+			maxDepth = getMaxLoopDepth(stmtType.Body.List, funcSymbolTable, maxDepth, currentDepth+1)
+		case *ast.LabeledStmt:
+			maxDepth = getMaxLoopDepth([]ast.Stmt{stmtType.Stmt}, funcSymbolTable, maxDepth, currentDepth)
+		case *ast.IfStmt:
+			maxDepth = getMaxLoopDepth(stmtType.Body.List, funcSymbolTable, maxDepth, currentDepth) // go deeper without incrementing
+			if stmtType.Else != nil {
+				if elseBlock, ok := stmtType.Else.(*ast.BlockStmt); ok {
+					maxDepth = getMaxLoopDepth(elseBlock.List, funcSymbolTable, maxDepth, currentDepth)
+				}
+			}
+		case *ast.SwitchStmt:
+			for _, stmt := range stmtType.Body.List {
+				if caseClause, isCaseClause := stmt.(*ast.CaseClause); isCaseClause {
+					maxDepth = getMaxLoopDepth(caseClause.Body, funcSymbolTable, maxDepth, currentDepth)
+				}
+			}
+		}
+	}
+	return maxDepth
+}
+
+
+func (analyser *Analyser) getSymbolTableForFunction(function *ast.FuncDecl) SymbolTable {
+    // var symbolTable SymbolTable
+    symbolTable := SymbolTable{
+        Globals: analyser.Globals, 
+    }   
+
+    // add parameters from the function AST
+    for _, params := range function.Type.Params.List {
+        for _, param := range params.Names {
+            symbolTable.Params = append(symbolTable.Params, param.Name)
+        }
+    }
+    // add short variable declarations (assignments) from the function AST
+    for _, stmt := range function.Body.List {
+        if assingStmt, ok := stmt.(*ast.AssignStmt); ok && assingStmt.Tok == token.DEFINE {
+            for _, exp := range assingStmt.Lhs{
+                if identifier, ok := exp.(*ast.Ident); ok{
+                    symbolTable.Locals = append(symbolTable.Locals, identifier.Name)
+                }
+            }
+        }
+    }
+    // add variable declarations from the function AST
+    for _, stmt := range function.Body.List {
+        if declStmt, ok := stmt.(*ast.DeclStmt); ok {
+            if genDecl, ok := declStmt.Decl.(*ast.GenDecl); ok && genDecl.Tok == token.VAR {
+                for _, spec := range genDecl.Specs {
+                    if valueSpec, ok := spec.(*ast.ValueSpec); ok {
+                        for _, identifier := range valueSpec.Names {
+                            symbolTable.Locals = append(symbolTable.Locals, identifier.Name)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    return symbolTable
 }
