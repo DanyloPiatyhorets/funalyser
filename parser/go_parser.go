@@ -4,14 +4,46 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"math"
 	"os"
 )
+
+type Analyser interface {
+    Visit(node ast.Node, functionContext *FunctionContext)
+}
+
+type TimeComplexityAnalyser struct {
+    // MaxDepth int
+}
+
+type SpaceComplexityAnalyser struct {
+
+}
+
+type FunctionContext struct {
+    Name string
+    SymbolTable SymbolTable
+    Depth int
+    Malloc int
+}
+
+func NewFunctionContext() *FunctionContext {
+    return &FunctionContext{}
+}
 
 type FunctionInfo struct {
 	Name                string
 	TimeComplexityIndex int
+    SpaceComplexityIndex int
     SymbolTable         SymbolTable
+}
+
+func (functionContext *FunctionContext) GetFunctionInfo() FunctionInfo {
+    return FunctionInfo {
+        Name: functionContext.Name,
+        TimeComplexityIndex: functionContext.Depth,
+        SpaceComplexityIndex: functionContext.Malloc,
+        SymbolTable: functionContext.SymbolTable,
+    }
 }
 
 type SymbolTable struct {
@@ -20,7 +52,7 @@ type SymbolTable struct {
     Globals []string
 }
 
-type Analyser struct {
+type FileContext struct {
     Globals []string
 }
 
@@ -29,94 +61,83 @@ func Process(filePath string) ([]FunctionInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	fset := token.NewFileSet()
     file, err := parser.ParseFile(fset, "", src, parser.AllErrors)
-	node, err := parser.ParseFile(fset, filePath, src, parser.AllErrors)
+	// node, err := parser.ParseFile(fset, filePath, src, parser.AllErrors)
 	if err != nil {
 		return nil, err
 	}
     // ast.Print(fset, file)
 
-
 	var funcs []FunctionInfo
-    var funcSymbolTable SymbolTable
-    var analyser Analyser
+    var fileContext FileContext
 
-    for _, decl := range file.Decls {
-        if gen, ok := decl.(*ast.GenDecl); ok {
-            for _, spec := range gen.Specs {
+    for _, declaration := range file.Decls {
+        switch decl := declaration.(type){
+        case *ast.GenDecl:
+            for _, spec := range decl.Specs {
                 if valSpec, ok := spec.(*ast.ValueSpec); ok {
                     for _, identifier := range valSpec.Names {
-                                analyser.Globals = append(analyser.Globals, identifier.Name)
+                                fileContext.Globals = append(fileContext.Globals, identifier.Name)
                     }
                 }
             }
+        case *ast.FuncDecl:
+            
+            functionContext := NewFunctionContext()
+            functionContext.SymbolTable = fileContext.getSymbolTableForFunction(decl)
+            functionContext.Name = decl.Name.Name
+
+            analysers := []Analyser{&TimeComplexityAnalyser{}, &SpaceComplexityAnalyser{},}
+
+            WalkAST(decl.Body, analysers, functionContext)
+
+            funcs = append(funcs, functionContext.GetFunctionInfo())
         }
     }
 
-	ast.Inspect(node, func(node ast.Node) bool {
-        
-        switch decl := node.(type) {
-        case *ast.FuncDecl:
-            funcSymbolTable = analyser.getSymbolTableForFunction(decl)
+        return funcs, nil
+    }
 
-			var funcStmtList []ast.Stmt = decl.Body.List
-			var timeComplexityIndex int = getMaxLoopDepth(funcStmtList, funcSymbolTable, 0, 0)
-
-			funcs = append(funcs, FunctionInfo{
-				Name:                decl.Name.Name,
-                SymbolTable: funcSymbolTable,
-				TimeComplexityIndex: timeComplexityIndex,
-			})
-        
+func WalkAST(block *ast.BlockStmt, analysers []Analyser, functionContext *FunctionContext){
+    ast.Inspect(block, func(node ast.Node) bool {
+        for _, analyser := range analysers {
+            analyser.Visit(node, functionContext)
         }
-
-		return true
-	})
-
-	return funcs, nil
+        return true
+    })
 }
 
-func getMaxLoopDepth(currentBodyList []ast.Stmt, funcSymbolTable SymbolTable, maxDepth int, currentDepth int) int {
-	maxDepth = int(math.Max(float64(currentDepth), float64(maxDepth)))
-	for _, stmt := range currentBodyList {
-		switch stmtType := stmt.(type) {
-        case *ast.ForStmt:
-            condExpr, ok := stmtType.Cond.(*ast.BinaryExpr)
+func (tcAnalyser *TimeComplexityAnalyser) Visit(node ast.Node, functionContext *FunctionContext){
+    // tcAnalyser.MaxDepth = int(math.Max(float64(tcAnalyser.MaxDepth), float64(functionContext.Depth)))
+    switch stmt := node.(type) {
+    case *ast.ForStmt:
+            condExpr, ok := stmt.Cond.(*ast.BinaryExpr)
             if !ok {
-                return 0
+                return 
             }
             switch condExpr.Y.(type) {
             case *ast.BasicLit:
-                maxDepth = getMaxLoopDepth(stmtType.Body.List, funcSymbolTable, maxDepth, currentDepth)
+                // skip
             case *ast.Ident:
-                maxDepth = getMaxLoopDepth(stmtType.Body.List, funcSymbolTable, maxDepth, currentDepth+1)
+                functionContext.Depth++
             }
-		case *ast.RangeStmt:
-			maxDepth = getMaxLoopDepth(stmtType.Body.List, funcSymbolTable, maxDepth, currentDepth+1)
-		case *ast.LabeledStmt:
-			maxDepth = getMaxLoopDepth([]ast.Stmt{stmtType.Stmt}, funcSymbolTable, maxDepth, currentDepth)
-		case *ast.IfStmt:
-			maxDepth = getMaxLoopDepth(stmtType.Body.List, funcSymbolTable, maxDepth, currentDepth) // go deeper without incrementing
-			if stmtType.Else != nil {
-				if elseBlock, ok := stmtType.Else.(*ast.BlockStmt); ok {
-					maxDepth = getMaxLoopDepth(elseBlock.List, funcSymbolTable, maxDepth, currentDepth)
-				}
-			}
-		case *ast.SwitchStmt:
-			for _, stmt := range stmtType.Body.List {
-				if caseClause, isCaseClause := stmt.(*ast.CaseClause); isCaseClause {
-					maxDepth = getMaxLoopDepth(caseClause.Body, funcSymbolTable, maxDepth, currentDepth)
-				}
-			}
-		}
-	}
-	return maxDepth
+
+    case *ast.RangeStmt:
+        functionContext.Depth++
+    }   
+}
+
+func (scAnalyser *SpaceComplexityAnalyser) Visit(node ast.Node, functionContext *FunctionContext){
+    switch node.(type){
+    case *ast.AssignStmt:
+
+    }
+    // functionContext.Malloc++
 }
 
 
-func (analyser *Analyser) getSymbolTableForFunction(function *ast.FuncDecl) SymbolTable {
+func (analyser *FileContext) getSymbolTableForFunction(function *ast.FuncDecl) SymbolTable {
     // var symbolTable SymbolTable
     symbolTable := SymbolTable{
         Globals: analyser.Globals, 
