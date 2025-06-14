@@ -13,7 +13,6 @@ func addNumbers(a, b int) int {
 	return a + b
 }
 
-// variety of loops to test
 
 func countToTen(uselessParam int) {
 	for i := 0; i < 10; i++ {
