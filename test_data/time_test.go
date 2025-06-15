@@ -54,10 +54,9 @@ outer:
 	}
 }
 
-func conditionalLoop(doIt bool) {
-	x := 5
+func conditionalLoop(doIt bool, n int) {
 	if doIt {
-		for i := 0; i < x; i++ {
+		for i := 0; i < n; i++ {
 			fmt.Println("DoIt:", i)
 		}
 	}

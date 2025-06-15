@@ -2,14 +2,13 @@ package test
 
 import (
 	"testing"
-    "funalyser/analyser"
+    "funalyser/analyser/go"
 )
 
 func TestSpaceComplexity(t *testing.T) {
-    file := "../test_data/space_samples.go"
+    file := "../test_data/space_test.go"
 	funcs, err := analyser.Process(file)
 
-    // funcs, err := parser.ParseFiles(files)
     if err != nil {
         t.Fatal(err)
     }
@@ -27,6 +26,8 @@ func TestSpaceComplexity(t *testing.T) {
         "mapSpace": 1,
         "reuseBuffer": 1,
         "conditionalAlloc": 1,
+        "fixedAlloc": 0,
+        "recurAlloc": 2,
     }
 
     for _, fn := range funcs {

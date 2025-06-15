@@ -1,9 +1,11 @@
 package main
 
-func constantSpace(n int) int {
-    x := 42
-    y := x + n
-    return y
+func constantSpace() []int {
+    arr := make([]int, 10)
+    for i := 0; i < 10; i++ {
+        arr[i] = i
+    }
+    return arr
 }
 
 func linearSpace(n int) []int {
@@ -88,4 +90,16 @@ func conditionalAlloc(n int) []int {
         return make([]int, n)
     }
     return nil
+}
+
+func fixedAlloc() []int {
+	return make([]int, 10)
+}
+
+func recurAlloc(n int) int {
+	if n == 0 {
+		return 0
+	}
+	arr := make([]int, n)
+	return arr[0] + recurAlloc(n-1)
 }

@@ -2,13 +2,13 @@ package test
 
 import (
 	"testing"
-    "funalyser/analyser"
+    "funalyser/analyser/go"
 )
 
 func TestTimeComplexity(t *testing.T) {
-    file := "../test_data/time_samples.go"
+    file := "../test_data/time_test.go"
 	funcs, err := analyser.Process(file)
-	
+
     if err != nil {
         t.Fatal(err)
     }
