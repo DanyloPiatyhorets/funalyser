@@ -13,7 +13,6 @@ func addNumbers(a, b int) int {
 	return a + b
 }
 
-// variety of loops to test
 
 func countToTen(uselessParam int) {
 	for i := 0; i < 10; i++ {
@@ -55,10 +54,9 @@ outer:
 	}
 }
 
-func conditionalLoop(doIt bool) {
-	x := 5
+func conditionalLoop(doIt bool, n int) {
 	if doIt {
-		for i := 0; i < x; i++ {
+		for i := 0; i < n; i++ {
 			fmt.Println("DoIt:", i)
 		}
 	}
