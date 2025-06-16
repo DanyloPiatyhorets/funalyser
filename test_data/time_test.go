@@ -72,3 +72,10 @@ func loopInSwitch(x int) {
 		fmt.Println("No loop here")
 	}
 }
+
+func recursion(n int) int {
+    if n == 0 {
+        return 0
+    }
+    return 1 + recursion(n-1)
+}
