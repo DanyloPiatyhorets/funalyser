@@ -87,14 +87,37 @@ func (tcAnalyser *TimeComplexityAnalyser) Visit(node ast.Node, functionContext *
 
     case *ast.RangeStmt:
         functionContext.MaxDepth++
+    case *ast.CallExpr:
+        funIdent, ok := stmt.Fun.(*ast.Ident)
+        if !ok {
+            return
+        }
+        switch funIdent.Name {
+            case functionContext.Name:
+            functionContext.MaxDepth += 1
+        }
+        }
     }   
-}
 
 func (scAnalyser *SpaceComplexityAnalyser) Visit(node ast.Node, functionContext *FunctionContext){
     switch stmt:= node.(type){
-    case *ast.ForStmt, *ast.RangeStmt:
+    case *ast.ForStmt:
+            condExpr, ok := stmt.Cond.(*ast.BinaryExpr)
+            if !ok {
+                return 
+            }
+            switch iterator := condExpr.Y.(type) {
+            case *ast.BasicLit:
+                // skip
+            case *ast.Ident:
+                if functionContext.SymbolTable.IsParam(iterator.Name){
+                    functionContext.CurrentDepth++
+                }
+            }
+
+    case *ast.RangeStmt:
         functionContext.CurrentDepth++
-        // defer func() {functionContext.CurrentDepth -- }()
+        
     case *ast.CallExpr:
         funIdent, ok := stmt.Fun.(*ast.Ident)
         if !ok {
