@@ -1,7 +1,6 @@
 package analyser
 
 import (
-	// "fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -13,10 +12,7 @@ type Analyser interface {
 	Visit(node ast.Node, functionContext *FunctionContext)
 }
 
-type TimeComplexityAnalyser struct {
-}
-
-type SpaceComplexityAnalyser struct {
+type TimeAndSpaceComplexityAnalyser struct {
 }
 
 func Process(filePath string) ([]FunctionInfo, error) {
@@ -26,11 +22,10 @@ func Process(filePath string) ([]FunctionInfo, error) {
 	}
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, "", src, parser.AllErrors)
-	// node, err := parser.ParseFile(fset, filePath, src, parser.AllErrors)
 	if err != nil {
 		return nil, err
 	}
-	ast.Print(fset, file)
+	// ast.Print(fset, file)
 
 	var funcs []FunctionInfo
 	var fileContext FileContext
@@ -51,9 +46,11 @@ func Process(filePath string) ([]FunctionInfo, error) {
 			functionContext.SymbolTable = fileContext.getSymbolTableForFunction(decl)
 			functionContext.Name = decl.Name.Name
 
-			analysers := []Analyser{&TimeComplexityAnalyser{}, &SpaceComplexityAnalyser{}}
+            analyser := &TimeAndSpaceComplexityAnalyser{}
 
-            WalkAST(decl.Body, analysers, functionContext)
+            for _, stmt := range decl.Body.List {
+                analyser.Visit(stmt, functionContext)
+	        }
 
 			funcs = append(funcs, functionContext.GetFunctionInfo())
 		}
@@ -62,124 +59,27 @@ func Process(filePath string) ([]FunctionInfo, error) {
 	return funcs, nil
 }
 
-func WalkAST(block *ast.BlockStmt, analysers []Analyser, functionContext *FunctionContext) {
-	for _, stmt := range block.List {
-		for _, analyser := range analysers {
-			analyser.Visit(stmt, functionContext)
-		}
-	}
-}
-
-func (tcAnalyser *TimeComplexityAnalyser) Visit(node ast.Node, functionContext *FunctionContext) {
-	functionContext.MaxDepth = int(math.Max(float64(functionContext.CurrentDepth), float64(functionContext.MaxDepth)))
-
-	switch stmt := node.(type) {
-	case *ast.BlockStmt:
-		for _, inner := range stmt.List {
-			tcAnalyser.Visit(inner, functionContext)
-		}
-	case *ast.LabeledStmt:
-		tcAnalyser.Visit(stmt.Stmt, functionContext)
-
-	case *ast.ForStmt:
-		condExpr, ok := stmt.Cond.(*ast.BinaryExpr)
-		if !ok {
-			return
-		}
-		switch iterator := condExpr.Y.(type) {
-		case *ast.BasicLit:
-			for _, inner := range stmt.Body.List {
-				tcAnalyser.Visit(inner, functionContext)
-			}
-		case *ast.Ident:
-			if functionContext.SymbolTable.IsParam(iterator.Name) {
-				functionContext.CurrentDepth++
-				for _, inner := range stmt.Body.List {
-					tcAnalyser.Visit(inner, functionContext)
-				}
-				functionContext.CurrentDepth--
-			}
-		}
-
-    case *ast.ReturnStmt:
-        for _, inner := range stmt.Results{
-            tcAnalyser.Visit(inner, functionContext)
-        }
-	case *ast.RangeStmt:
-		functionContext.CurrentDepth++
-		for _, inner := range stmt.Body.List {
-			tcAnalyser.Visit(inner, functionContext)
-		}
-		functionContext.CurrentDepth--
-
-	case *ast.IfStmt:
-		for _, inner := range stmt.Body.List {
-			tcAnalyser.Visit(inner, functionContext)
-		}
-		if stmt.Else != nil {
-			tcAnalyser.Visit(stmt.Else, functionContext)
-		}
-
-		// TODO: add recursion and logarithmic complexity here. Check the arguments passed during
-		// the recursion to identify what is the complexity
-	}
-}
-
-func (scAnalyser *SpaceComplexityAnalyser) Visit(node ast.Node, functionContext *FunctionContext) {
+func (tscAnalyser *TimeAndSpaceComplexityAnalyser) Visit(node ast.Node, functionContext *FunctionContext) {
 
 	functionContext.MaxDepth = int(math.Max(float64(functionContext.CurrentDepth), float64(functionContext.MaxDepth)))
 	functionContext.MaxMalloc = int(math.Max(float64(functionContext.CurrentMalloc), float64(functionContext.MaxMalloc)))
 
 	switch stmt := node.(type) {
+	case *ast.AssignStmt:
+        tscAnalyser.Visit(stmt.Rhs[0], functionContext)
+
+	case *ast.BinaryExpr:
+		tscAnalyser.Visit(stmt.X, functionContext)
+		tscAnalyser.Visit(stmt.Y, functionContext)
+
 	case *ast.BlockStmt:
-		for _, inner := range stmt.List {
-			scAnalyser.Visit(inner, functionContext)
-		}
-	case *ast.LabeledStmt:
-		scAnalyser.Visit(stmt.Stmt, functionContext)
-
-	case *ast.ForStmt:
-		condExpr, ok := stmt.Cond.(*ast.BinaryExpr)
-		if !ok {
-			return
-		}
-		switch iterator := condExpr.Y.(type) {
-		case *ast.BasicLit:
-			for _, inner := range stmt.Body.List {
-				scAnalyser.Visit(inner, functionContext)
+			for _, inner := range stmt.List {
+				tscAnalyser.Visit(inner, functionContext)
 			}
-		case *ast.Ident:
-			if functionContext.SymbolTable.IsParam(iterator.Name) {
-				functionContext.CurrentDepth++
-				for _, inner := range stmt.Body.List {
-					scAnalyser.Visit(inner, functionContext)
-				}
-				functionContext.CurrentDepth--
-			}
-		}
+		
+	// BranchStmt
 
-	case *ast.RangeStmt:
-		functionContext.CurrentDepth++
-		for _, inner := range stmt.Body.List {
-			scAnalyser.Visit(inner, functionContext)
-		}
-		functionContext.CurrentDepth--
-
-	case *ast.IfStmt:
-		for _, inner := range stmt.Body.List {
-			scAnalyser.Visit(inner, functionContext)
-		}
-		if stmt.Else != nil {
-			scAnalyser.Visit(stmt.Else, functionContext)
-		}
-    case *ast.AssignStmt:
-        scAnalyser.Visit(stmt.Rhs[0], functionContext)
-    case *ast.ReturnStmt:
-        for _, inner := range stmt.Results{
-            scAnalyser.Visit(inner, functionContext)
-        }
-
-    case *ast.CallExpr:
+	case *ast.CallExpr:
         funIdent, ok := stmt.Fun.(*ast.Ident)
         if !ok {
             return
@@ -200,12 +100,103 @@ func (scAnalyser *SpaceComplexityAnalyser) Visit(node ast.Node, functionContext 
     
         case "append":
             functionContext.CurrentMalloc = functionContext.CurrentDepth
+		
         case functionContext.Name:
-            functionContext.CurrentMalloc += 1
-        }
-
-
 		// TODO: add recursion and logarithmic complexity here. Check the arguments passed during
 		// the recursion to identify what is the complexity
+		}
+	
+	// CaseClause
+
+	// CommClause
+
+	// DeclStmt
+
+	case *ast.ForStmt:
+			condExpr, ok := stmt.Cond.(*ast.BinaryExpr)
+			if !ok {
+				return
+			}
+			switch iterator := condExpr.Y.(type) {
+			case *ast.BasicLit:
+				for _, inner := range stmt.Body.List {
+					tscAnalyser.Visit(inner, functionContext)
+				}
+			case *ast.Ident:
+				if functionContext.SymbolTable.IsParam(iterator.Name) {
+					functionContext.CurrentDepth++
+					for _, inner := range stmt.Body.List {
+						tscAnalyser.Visit(inner, functionContext)
+					}
+					functionContext.CurrentDepth--
+				}
+
+			default:
+				if containsParam(condExpr, &functionContext.SymbolTable) {
+					functionContext.CurrentDepth++
+					for _, inner := range stmt.Body.List {
+						tscAnalyser.Visit(inner, functionContext)
+					}
+					functionContext.CurrentDepth--
+				} else {
+					for _, inner := range stmt.Body.List {
+						tscAnalyser.Visit(inner, functionContext)
+					}
+				}
+			}
+
+	case *ast.IfStmt:
+		for _, inner := range stmt.Body.List {
+			tscAnalyser.Visit(inner, functionContext)
+		}
+		if stmt.Else != nil {
+			tscAnalyser.Visit(stmt.Else, functionContext)
+		}
+   	
+	case *ast.LabeledStmt:
+		tscAnalyser.Visit(stmt.Stmt, functionContext)
+
+	// ParenExpr
+	
+	case *ast.RangeStmt:
+		functionContext.CurrentDepth++
+		for _, inner := range stmt.Body.List {
+			tscAnalyser.Visit(inner, functionContext)
+		}
+		functionContext.CurrentDepth--
+
+    case *ast.ReturnStmt:
+        for _, inner := range stmt.Results{
+            tscAnalyser.Visit(inner, functionContext)
+        }
 	}
+	
+	// SelectStmt
+
+	// SwitchStmt
+
+	// TypeSwitchStmt
+    
+}
+
+func containsParam(expr ast.Expr, symbolTable *SymbolTable) bool {
+    switch exp := expr.(type) {
+	case *ast.Ident:
+		return symbolTable.IsParam(exp.Name)
+    case *ast.CallExpr:
+        if funIdent, ok := exp.Fun.(*ast.Ident); ok && funIdent.Name == "len" {
+            if len(exp.Args) == 1 {
+                if argIdent, ok := exp.Args[0].(*ast.Ident); ok {
+                    return symbolTable.IsParam(argIdent.Name)
+                }
+            }
+        }
+    case *ast.BinaryExpr:
+        return containsParam(exp.X, symbolTable) || containsParam(exp.Y, symbolTable)
+	case *ast.IndexExpr:
+        return containsParam(exp.X, symbolTable) || containsParam(exp.Index, symbolTable)
+    case *ast.ParenExpr:
+        return containsParam(exp.X, symbolTable)
+    }
+    return false
 }
