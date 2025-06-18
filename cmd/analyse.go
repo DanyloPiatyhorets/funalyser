@@ -50,16 +50,16 @@ func printFunctionReport(fn analyser.FunctionInfo) {
 	}	
 
 	// Hardcoded timeExpected values
-	// timeExpected := map[string]int{
-	// 	"addNumbers":      0,
-	// 	"countToTen":      0,
-	// 	"printItems":      1,
-	// 	"nestedLoop":      2,
-	// 	"loopForever":     1,
-	// 	"labeledBreak":    2,
-	// 	"conditionalLoop": 1,
-	// 	"loopInSwitch":    0,
-	// }
+	timeExpected := map[string]int{
+		"addNumbers":      0,
+		"countToTen":      0,
+		"printItems":      1,
+		"nestedLoop":      2,
+		"loopForever":     0,
+		"labeledBreak":    2,
+		"conditionalLoop": 1,
+		"loopInSwitch":    0,
+	}
 	// spaceExpected := map[string]int{
 	// 	"addNumbers":       0,
 	// 	"countToTen":       0,
@@ -74,16 +74,16 @@ func printFunctionReport(fn analyser.FunctionInfo) {
 	// }
 
 
-	// expectedTC := timeExpected[fn.Name]
+	expectedTC := timeExpected[fn.Name]
 	expectedSC := spaceExpected[fn.Name]
 
-	// tcCorrect := fn.TimeComplexityIndex == expectedTC
+	tcCorrect := fn.TimeComplexityIndex == expectedTC
 	scCorrect := fn.SpaceComplexityIndex == expectedSC
 
-	// tcSymbol := "❌"
-	// if tcCorrect {
-	// 	tcSymbol = "✅"
-	// }
+	tcSymbol := "❌"
+	if tcCorrect {
+		tcSymbol = "✅"
+	}
 	scSymbol := "❌"
 	if scCorrect {
 		scSymbol = "✅"
@@ -91,11 +91,10 @@ func printFunctionReport(fn analyser.FunctionInfo) {
 	
 
     fmt.Printf(
-		// | Time: %-7s %s
-    "Func: %-15s | Space: %-2d %s | Params: %v | Locals: %v | Globals: %v\n",
+    "Func: %-15s | Time: %-7s %s | Space: %-2d %s | Params: %v | Locals: %v | Globals: %v\n",
     fn.Name,
-    // parseIndexToTimeComplexity(fn.TimeComplexityIndex),
-    // tcSymbol,
+    parseIndexToTimeComplexity(fn.TimeComplexityIndex),
+    tcSymbol,
     fn.SpaceComplexityIndex,
     scSymbol,
     fn.SymbolTable.Params,
