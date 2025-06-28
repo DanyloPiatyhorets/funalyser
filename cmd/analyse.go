@@ -31,7 +31,7 @@ func analyse(cmd *cobra.Command, args []string) {
 
 func printFunctionReport(fn analyser.FunctionInfo) {
 
-	spaceExpected := map[string]int{
+	spaceExpected := map[string]float32{
     "constantSpace":         0,
     "linearSpace":           1,
     "linearAppend":          1,
@@ -50,7 +50,7 @@ func printFunctionReport(fn analyser.FunctionInfo) {
 	}	
 
 	// Hardcoded timeExpected values
-	timeExpected := map[string]int{
+	timeExpected := map[string]float32{
 		"addNumbers":      0,
 		"countToTen":      0,
 		"printItems":      1,
@@ -59,6 +59,7 @@ func printFunctionReport(fn analyser.FunctionInfo) {
 		"labeledBreak":    2,
 		"conditionalLoop": 1,
 		"loopInSwitch":    0,
+		"recursion":       1,
 	}
 	// spaceExpected := map[string]int{
 	// 	"addNumbers":       0,
@@ -91,24 +92,29 @@ func printFunctionReport(fn analyser.FunctionInfo) {
 	
 
     fmt.Printf(
-    "Func: %-15s | Time: %-7s %s | Space: %-2d %s | Params: %v | Locals: %v | Globals: %v\n",
+    "Func: %-15s | Time: %-7s %s | Space: %-7s %s | FanOut=%d | Params: %v | Locals: %v | Globals: %v\n",
     fn.Name,
     parseIndexToTimeComplexity(fn.TimeComplexityIndex),
     tcSymbol,
-    fn.SpaceComplexityIndex,
+    parseIndexToTimeComplexity(fn.SpaceComplexityIndex),
     scSymbol,
+	fn.FanOut,
     fn.SymbolTable.Params,
     fn.SymbolTable.Locals,
     fn.SymbolTable.Globals,
 )   
 }
 
-func parseIndexToTimeComplexity(maxLoopDepth int) string {
+func parseIndexToTimeComplexity(maxLoopDepth float32) string {
 	switch maxLoopDepth {
 	case 0:
 		return "O(1)"
+	case 0.5:
+		return "O(log n)"
 	case 1:
 		return "O(n)"
+	case 1.5:
+		return "O(n*log n)"
 	}
-	return "O(n^" + strconv.Itoa(maxLoopDepth) + ")"
+	return "O(n^" + strconv.Itoa(int(maxLoopDepth)) + ")"
 }
