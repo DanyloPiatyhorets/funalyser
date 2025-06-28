@@ -61,9 +61,6 @@ func Process(filePath string) ([]FunctionInfo, error) {
 
 func (tscAnalyser *TimeAndSpaceComplexityAnalyser) Visit(node ast.Node, functionContext *FunctionContext) {
 
-	functionContext.MaxDepth = int(math.Max(float64(functionContext.CurrentDepth), float64(functionContext.MaxDepth)))
-	functionContext.MaxMalloc = int(math.Max(float64(functionContext.CurrentMalloc), float64(functionContext.MaxMalloc)))
-
 	switch stmt := node.(type) {
 	case *ast.AssignStmt:
         tscAnalyser.Visit(stmt.Rhs[0], functionContext)
@@ -102,8 +99,10 @@ func (tscAnalyser *TimeAndSpaceComplexityAnalyser) Visit(node ast.Node, function
             functionContext.CurrentMalloc = functionContext.CurrentDepth
 		
         case functionContext.Name:
-		// TODO: add recursion and logarithmic complexity here. Check the arguments passed during
-		// the recursion to identify what is the complexity
+			time, space := GetRecursiveComplexity(stmt)
+			functionContext.CurrentDepth += time
+			functionContext.CurrentMalloc += space
+			functionContext.RecursiveFanOut++
 		}
 	
 	// CaseClause
@@ -111,6 +110,9 @@ func (tscAnalyser *TimeAndSpaceComplexityAnalyser) Visit(node ast.Node, function
 	// CommClause
 
 	// DeclStmt
+
+	case *ast.ExprStmt:
+		tscAnalyser.Visit(stmt.X, functionContext)
 
 	case *ast.ForStmt:
 			condExpr, ok := stmt.Cond.(*ast.BinaryExpr)
@@ -132,7 +134,7 @@ func (tscAnalyser *TimeAndSpaceComplexityAnalyser) Visit(node ast.Node, function
 				}
 
 			default:
-				if containsParam(condExpr, &functionContext.SymbolTable) {
+				if ExpressionContainsParam(condExpr, &functionContext.SymbolTable) {
 					functionContext.CurrentDepth++
 					for _, inner := range stmt.Body.List {
 						tscAnalyser.Visit(inner, functionContext)
@@ -177,26 +179,7 @@ func (tscAnalyser *TimeAndSpaceComplexityAnalyser) Visit(node ast.Node, function
 
 	// TypeSwitchStmt
     
-}
+	functionContext.MaxDepth = float32(math.Max(float64(functionContext.CurrentDepth), float64(functionContext.MaxDepth)))
+	functionContext.MaxMalloc = float32(math.Max(float64(functionContext.CurrentMalloc), float64(functionContext.MaxMalloc)))
 
-func containsParam(expr ast.Expr, symbolTable *SymbolTable) bool {
-    switch exp := expr.(type) {
-	case *ast.Ident:
-		return symbolTable.IsParam(exp.Name)
-    case *ast.CallExpr:
-        if funIdent, ok := exp.Fun.(*ast.Ident); ok && funIdent.Name == "len" {
-            if len(exp.Args) == 1 {
-                if argIdent, ok := exp.Args[0].(*ast.Ident); ok {
-                    return symbolTable.IsParam(argIdent.Name)
-                }
-            }
-        }
-    case *ast.BinaryExpr:
-        return containsParam(exp.X, symbolTable) || containsParam(exp.Y, symbolTable)
-	case *ast.IndexExpr:
-        return containsParam(exp.X, symbolTable) || containsParam(exp.Index, symbolTable)
-    case *ast.ParenExpr:
-        return containsParam(exp.X, symbolTable)
-    }
-    return false
 }
