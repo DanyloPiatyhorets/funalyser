@@ -4,17 +4,15 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"math"
 	"os"
 )
 
 type Analyser interface {
-    Visit(node ast.Node, functionContext *FunctionContext)
+	Visit(node ast.Node, functionContext *FunctionContext)
 }
 
-type TimeComplexityAnalyser struct {
-}
-
-type SpaceComplexityAnalyser struct {
+type TimeAndSpaceComplexityAnalyser struct {
 }
 
 func Process(filePath string) ([]FunctionInfo, error) {
@@ -23,102 +21,62 @@ func Process(filePath string) ([]FunctionInfo, error) {
 		return nil, err
 	}
 	fset := token.NewFileSet()
-    file, err := parser.ParseFile(fset, "", src, parser.AllErrors)
-	// node, err := parser.ParseFile(fset, filePath, src, parser.AllErrors)
+	file, err := parser.ParseFile(fset, "", src, parser.AllErrors)
 	if err != nil {
 		return nil, err
 	}
-    // ast.Print(fset, file)
+	// ast.Print(fset, file)
 
 	var funcs []FunctionInfo
-    var fileContext FileContext
+	var fileContext FileContext
 
-    for _, declaration := range file.Decls {
-        switch decl := declaration.(type){
-        case *ast.GenDecl:
-            for _, spec := range decl.Specs {
-                if valSpec, ok := spec.(*ast.ValueSpec); ok {
-                    for _, identifier := range valSpec.Names {
-                                fileContext.Globals = append(fileContext.Globals, identifier.Name)
-                    }
-                }
-            }
-        case *ast.FuncDecl:
-            
-            functionContext := NewFunctionContext()
-            functionContext.SymbolTable = fileContext.getSymbolTableForFunction(decl)
-            functionContext.Name = decl.Name.Name
+	for _, declaration := range file.Decls {
+		switch decl := declaration.(type) {
+		case *ast.GenDecl:
+			for _, spec := range decl.Specs {
+				if valSpec, ok := spec.(*ast.ValueSpec); ok {
+					for _, identifier := range valSpec.Names {
+						fileContext.Globals = append(fileContext.Globals, identifier.Name)
+					}
+				}
+			}
+		case *ast.FuncDecl:
 
-            analysers := []Analyser{&TimeComplexityAnalyser{}, &SpaceComplexityAnalyser{},}
+			functionContext := NewFunctionContext()
+			functionContext.SymbolTable = fileContext.getSymbolTableForFunction(decl)
+			functionContext.Name = decl.Name.Name
 
-            WalkAST(decl.Body, analysers, functionContext)
+            analyser := &TimeAndSpaceComplexityAnalyser{}
 
-            funcs = append(funcs, functionContext.GetFunctionInfo())
-        }
-    }
+            for _, stmt := range decl.Body.List {
+                analyser.Visit(stmt, functionContext)
+	        }
 
-        return funcs, nil
-    }
+			funcs = append(funcs, functionContext.GetFunctionInfo())
+		}
+	}
 
-func WalkAST(block *ast.BlockStmt, analysers []Analyser, functionContext *FunctionContext){
-    ast.Inspect(block, func(node ast.Node) bool {
-        for _, analyser := range analysers {
-            analyser.Visit(node, functionContext)
-        }
-        return true
-    })
+	return funcs, nil
 }
 
-func (tcAnalyser *TimeComplexityAnalyser) Visit(node ast.Node, functionContext *FunctionContext){
-    switch stmt := node.(type) {
-    case *ast.ForStmt:
-            condExpr, ok := stmt.Cond.(*ast.BinaryExpr)
-            if !ok {
-                return 
-            }
-            switch iterator := condExpr.Y.(type) {
-            case *ast.BasicLit:
-                // skip
-            case *ast.Ident:
-                if functionContext.SymbolTable.IsParam(iterator.Name){
-                    functionContext.MaxDepth++
-                }
-            }
+func (tscAnalyser *TimeAndSpaceComplexityAnalyser) Visit(node ast.Node, functionContext *FunctionContext) {
 
-    case *ast.RangeStmt:
-        functionContext.MaxDepth++
-    case *ast.CallExpr:
-        funIdent, ok := stmt.Fun.(*ast.Ident)
-        if !ok {
-            return
-        }
-        switch funIdent.Name {
-            case functionContext.Name:
-            functionContext.MaxDepth += 1
-        }
-        }
-    }   
+	switch stmt := node.(type) {
+	case *ast.AssignStmt:
+        tscAnalyser.Visit(stmt.Rhs[0], functionContext)
 
-func (scAnalyser *SpaceComplexityAnalyser) Visit(node ast.Node, functionContext *FunctionContext){
-    switch stmt:= node.(type){
-    case *ast.ForStmt:
-            condExpr, ok := stmt.Cond.(*ast.BinaryExpr)
-            if !ok {
-                return 
-            }
-            switch iterator := condExpr.Y.(type) {
-            case *ast.BasicLit:
-                // skip
-            case *ast.Ident:
-                if functionContext.SymbolTable.IsParam(iterator.Name){
-                    functionContext.CurrentDepth++
-                }
-            }
+	case *ast.BinaryExpr:
+		tscAnalyser.Visit(stmt.X, functionContext)
+		tscAnalyser.Visit(stmt.Y, functionContext)
 
-    case *ast.RangeStmt:
-        functionContext.CurrentDepth++
-        
-    case *ast.CallExpr:
+	case *ast.BlockStmt:
+			for _, inner := range stmt.List {
+				tscAnalyser.Visit(inner, functionContext)
+			}
+		
+	// BranchStmt
+
+	case *ast.CallExpr:
         funIdent, ok := stmt.Fun.(*ast.Ident)
         if !ok {
             return
@@ -130,17 +88,98 @@ func (scAnalyser *SpaceComplexityAnalyser) Visit(node ast.Node, functionContext 
             case *ast.ArrayType:
                 if size, ok := stmt.Args[1].(*ast.Ident); ok {
                     if functionContext.SymbolTable.IsParam(size.Name) {
-                        functionContext.Malloc = 1 + functionContext.CurrentDepth
+                        functionContext.CurrentMalloc = 1 + functionContext.CurrentDepth
                     }
             }
             case *ast.MapType:
-                functionContext.Malloc = 1 + functionContext.CurrentDepth
+                functionContext.CurrentMalloc = 1 + functionContext.CurrentDepth
             }
     
         case "append":
-            functionContext.Malloc = functionContext.CurrentDepth
+            functionContext.CurrentMalloc = functionContext.CurrentDepth
+		
         case functionContext.Name:
-            functionContext.Malloc += 1
+			time, space := GetRecursiveComplexity(stmt)
+			functionContext.CurrentDepth += time
+			functionContext.CurrentMalloc += space
+			functionContext.RecursiveFanOut++
+		}
+	
+	// CaseClause
+
+	// CommClause
+
+	// DeclStmt
+
+	case *ast.ExprStmt:
+		tscAnalyser.Visit(stmt.X, functionContext)
+
+	case *ast.ForStmt:
+			condExpr, ok := stmt.Cond.(*ast.BinaryExpr)
+			if !ok {
+				return
+			}
+			switch iterator := condExpr.Y.(type) {
+			case *ast.BasicLit:
+				for _, inner := range stmt.Body.List {
+					tscAnalyser.Visit(inner, functionContext)
+				}
+			case *ast.Ident:
+				if functionContext.SymbolTable.IsParam(iterator.Name) {
+					functionContext.CurrentDepth++
+					for _, inner := range stmt.Body.List {
+						tscAnalyser.Visit(inner, functionContext)
+					}
+					functionContext.CurrentDepth--
+				}
+
+			default:
+				if ExpressionContainsParam(condExpr, &functionContext.SymbolTable) {
+					functionContext.CurrentDepth++
+					for _, inner := range stmt.Body.List {
+						tscAnalyser.Visit(inner, functionContext)
+					}
+					functionContext.CurrentDepth--
+				} else {
+					for _, inner := range stmt.Body.List {
+						tscAnalyser.Visit(inner, functionContext)
+					}
+				}
+			}
+
+	case *ast.IfStmt:
+		for _, inner := range stmt.Body.List {
+			tscAnalyser.Visit(inner, functionContext)
+		}
+		if stmt.Else != nil {
+			tscAnalyser.Visit(stmt.Else, functionContext)
+		}
+   	
+	case *ast.LabeledStmt:
+		tscAnalyser.Visit(stmt.Stmt, functionContext)
+
+	// ParenExpr
+	
+	case *ast.RangeStmt:
+		functionContext.CurrentDepth++
+		for _, inner := range stmt.Body.List {
+			tscAnalyser.Visit(inner, functionContext)
+		}
+		functionContext.CurrentDepth--
+
+    case *ast.ReturnStmt:
+        for _, inner := range stmt.Results{
+            tscAnalyser.Visit(inner, functionContext)
         }
-    }
+	}
+	
+	// SelectStmt
+
+	// SwitchStmt
+
+	// TypeSwitchStmt
+    
+	functionContext.MaxDepth = float32(math.Max(float64(functionContext.CurrentDepth), float64(functionContext.MaxDepth)))
+	functionContext.MaxMalloc = float32(math.Max(float64(functionContext.CurrentMalloc), float64(functionContext.MaxMalloc)))
+
 }
