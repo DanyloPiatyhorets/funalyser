@@ -58,7 +58,7 @@ func printFunctionReport(fn analyser.FunctionInfo) {
 		"loopForever":     0,
 		"labeledBreak":    2,
 		"conditionalLoop": 1,
-		"loopInSwitch":    0,
+		"loopInSwitch":    1,
 		"recursion":       1,
 	}
 	// spaceExpected := map[string]int{

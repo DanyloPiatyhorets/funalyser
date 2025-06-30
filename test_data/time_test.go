@@ -65,7 +65,7 @@ func conditionalLoop(doIt bool, n int) {
 func loopInSwitch(x int) {
 	switch x {
 	case 1:
-		for i := 0; i < 2; i++ {
+		for i := 0; i < x; i++ {
 			fmt.Println("Case 1:", i)
 		}
 	case 2:

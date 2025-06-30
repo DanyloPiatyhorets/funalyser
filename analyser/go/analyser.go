@@ -74,8 +74,6 @@ func (tscAnalyser *TimeAndSpaceComplexityAnalyser) Visit(node ast.Node, function
 				tscAnalyser.Visit(inner, functionContext)
 			}
 		
-	// BranchStmt
-
 	case *ast.CallExpr:
         funIdent, ok := stmt.Fun.(*ast.Ident)
         if !ok {
@@ -105,11 +103,10 @@ func (tscAnalyser *TimeAndSpaceComplexityAnalyser) Visit(node ast.Node, function
 			functionContext.RecursiveFanOut++
 		}
 	
-	// CaseClause
-
-	// CommClause
-
-	// DeclStmt
+	case *ast.CaseClause:
+		for _, inner := range stmt.Body {
+			tscAnalyser.Visit(inner, functionContext)
+		}
 
 	case *ast.ExprStmt:
 		tscAnalyser.Visit(stmt.X, functionContext)
@@ -157,8 +154,6 @@ func (tscAnalyser *TimeAndSpaceComplexityAnalyser) Visit(node ast.Node, function
    	
 	case *ast.LabeledStmt:
 		tscAnalyser.Visit(stmt.Stmt, functionContext)
-
-	// ParenExpr
 	
 	case *ast.RangeStmt:
 		functionContext.CurrentDepth++
@@ -171,13 +166,13 @@ func (tscAnalyser *TimeAndSpaceComplexityAnalyser) Visit(node ast.Node, function
         for _, inner := range stmt.Results{
             tscAnalyser.Visit(inner, functionContext)
         }
+
+	case *ast.SwitchStmt:
+		for _, cases := range stmt.Body.List {
+			tscAnalyser.Visit(cases, functionContext)
+		}
 	}
-	
-	// SelectStmt
 
-	// SwitchStmt
-
-	// TypeSwitchStmt
     
 	functionContext.MaxDepth = float32(math.Max(float64(functionContext.CurrentDepth), float64(functionContext.MaxDepth)))
 	functionContext.MaxMalloc = float32(math.Max(float64(functionContext.CurrentMalloc), float64(functionContext.MaxMalloc)))
