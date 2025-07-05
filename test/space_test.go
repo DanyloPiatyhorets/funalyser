@@ -6,14 +6,14 @@ import (
 )
 
 func TestSpaceComplexity(t *testing.T) {
-    file := "../test_data/space_test.go"
+    file := "test_data/space_samples.go"
 	funcs, err := analyser.Process(file)
 
     if err != nil {
         t.Fatal(err)
     }
 
-    expected := map[string]int{
+    expected := map[string]float32{
         "constantSpace":     0,
         "linearSpace":       1,
         "linearAppend": 1,
@@ -31,12 +31,12 @@ func TestSpaceComplexity(t *testing.T) {
     }
 
     for _, fn := range funcs {
-        got := fn.SpaceComplexityIndex
+        got := fn.Complexity.SpaceIndex
         want, ok := expected[fn.Name]
         if !ok {
             t.Errorf("No expected result for %s", fn.Name)
         } else if got != want {
-            t.Errorf("space for %s: expected %d, got %d", fn.Name, want, got)
+            t.Errorf("space for %s: expected %f, got %f", fn.Name, want, got)
         }
     }
 }
