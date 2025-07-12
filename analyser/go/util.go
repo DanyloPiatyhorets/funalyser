@@ -3,19 +3,25 @@ package analyser
 import (
 	"go/ast"
 	"go/token"
+	"strings"
 )
 
 type FileContext struct {
 	Globals []string
 }
 
+type Complexity struct {
+	TimeIndex  float32
+	SpaceIndex float32
+}
+
 type FunctionContext struct {
-	Name          	string
-	SymbolTable   	SymbolTable
-	CurrentDepth  	float32
-	MaxDepth      	float32
-	CurrentMalloc 	float32
-    MaxMalloc     	float32
+	Name            string
+	SymbolTable     SymbolTable
+	CurrentDepth    float32
+	MaxDepth        float32
+	CurrentMalloc   float32
+	MaxMalloc       float32
 	RecursiveFanOut int
 }
 
@@ -24,20 +30,21 @@ func NewFunctionContext() *FunctionContext {
 }
 
 type FunctionInfo struct {
-	Name                 string
-	TimeComplexityIndex  float32
-	SpaceComplexityIndex float32
-	SymbolTable          SymbolTable
-	FanOut				 int
+	Name        string
+	Complexity  Complexity
+	SymbolTable SymbolTable
+	FanOut      int
 }
 
 func (functionContext *FunctionContext) GetFunctionInfo() FunctionInfo {
 	return FunctionInfo{
-		Name:                 functionContext.Name,
-		TimeComplexityIndex:  functionContext.MaxDepth,
-		SpaceComplexityIndex: functionContext.MaxMalloc,
-		SymbolTable:          functionContext.SymbolTable,
-		FanOut:				  functionContext.RecursiveFanOut,
+		Name: functionContext.Name,
+		Complexity: Complexity{
+			TimeIndex:  functionContext.MaxDepth,
+			SpaceIndex: functionContext.MaxMalloc,
+		},
+		SymbolTable: functionContext.SymbolTable,
+		FanOut:      functionContext.RecursiveFanOut,
 	}
 }
 
@@ -97,31 +104,31 @@ func (analyser *FileContext) getSymbolTableForFunction(function *ast.FuncDecl) S
 }
 
 func ExpressionContainsParam(expr ast.Expr, symbolTable *SymbolTable) bool {
-    switch exp := expr.(type) {
+	switch exp := expr.(type) {
 	case *ast.Ident:
 		return symbolTable.IsParam(exp.Name)
-    case *ast.CallExpr:
-        if funIdent, ok := exp.Fun.(*ast.Ident); ok && funIdent.Name == "len" {
-            if len(exp.Args) == 1 {
-                if argIdent, ok := exp.Args[0].(*ast.Ident); ok {
-                    return symbolTable.IsParam(argIdent.Name)
-                }
-            }
-        }
-    case *ast.BinaryExpr:
-        return ExpressionContainsParam(exp.X, symbolTable) || ExpressionContainsParam(exp.Y, symbolTable)
+	case *ast.CallExpr:
+		if funIdent, ok := exp.Fun.(*ast.Ident); ok && funIdent.Name == "len" {
+			if len(exp.Args) == 1 {
+				if argIdent, ok := exp.Args[0].(*ast.Ident); ok {
+					return symbolTable.IsParam(argIdent.Name)
+				}
+			}
+		}
+	case *ast.BinaryExpr:
+		return ExpressionContainsParam(exp.X, symbolTable) || ExpressionContainsParam(exp.Y, symbolTable)
 	case *ast.IndexExpr:
-        return ExpressionContainsParam(exp.X, symbolTable) || ExpressionContainsParam(exp.Index, symbolTable)
-    case *ast.ParenExpr:
-        return ExpressionContainsParam(exp.X, symbolTable)
-    }
-    return false
+		return ExpressionContainsParam(exp.X, symbolTable) || ExpressionContainsParam(exp.Index, symbolTable)
+	case *ast.ParenExpr:
+		return ExpressionContainsParam(exp.X, symbolTable)
+	}
+	return false
 }
 
 func GetRecursiveComplexity(expr *ast.CallExpr) (float32, float32) {
 	var time float32 = 0
 	var space float32 = 0
-	if exp, ok := expr.Args[0].(*ast.BinaryExpr); ok  {
+	if exp, ok := expr.Args[0].(*ast.BinaryExpr); ok {
 		switch exp.Op.String() {
 		case "+", "-":
 			time = 1
@@ -132,4 +139,8 @@ func GetRecursiveComplexity(expr *ast.CallExpr) (float32, float32) {
 		}
 	}
 	return time, space
+}
+
+func isFunctionName(funcDecl *ast.FuncDecl, funcName string) bool {
+	return strings.ToLower(funcName) == strings.ToLower(funcDecl.Name.Name) 
 }
