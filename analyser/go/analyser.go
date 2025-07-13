@@ -16,89 +16,65 @@ type Analyser interface {
 type TimeAndSpaceComplexityAnalyser struct {
 }
 
-func AnalyseFile(filePath string) ([]FunctionInfo, error) {
-	src, err := os.ReadFile(filePath)
-	if err != nil {
-		return nil, err
+func Analyse(filePath string, functionName string) ([]FunctionInfo, error) {
+	src, IOError := os.ReadFile(filePath)
+	if IOError != nil {
+		return nil, IOError
 	}
 	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, "", src, parser.AllErrors)
-	if err != nil {
-		return nil, err
+	file, IOError := parser.ParseFile(fset, "", src, parser.AllErrors)
+	if IOError != nil {
+		return nil, IOError
 	}
 	// ast.Print(fset, file)
 
+	var funcsInfo []FunctionInfo
+	var fileContext FileContext = GetFileContext(file)
+
+	var functionInfoError error
+	if functionName == "" {
+		funcsInfo, functionInfoError = getAllFunctionInfo(file, &fileContext)
+	} else {
+		var funcInfo FunctionInfo
+		funcInfo, functionInfoError = getFunctionInfoByName(file, &fileContext, functionName)
+		if functionInfoError == nil {
+			funcsInfo = append(funcsInfo, funcInfo)
+		}
+	}
+
+	return funcsInfo, functionInfoError
+}
+
+func getAllFunctionInfo(file *ast.File, fileContext *FileContext) ([]FunctionInfo, error) {
 	var funcs []FunctionInfo
-	var fileContext FileContext
 
 	for _, declaration := range file.Decls {
 		switch decl := declaration.(type) {
-		case *ast.GenDecl:
-			for _, spec := range decl.Specs {
-				if valSpec, ok := spec.(*ast.ValueSpec); ok {
-					for _, identifier := range valSpec.Names {
-						fileContext.Globals = append(fileContext.Globals, identifier.Name)
-					}
-				}
-			}
 		case *ast.FuncDecl:
-
-			functionContext := NewFunctionContext()
-			functionContext.SymbolTable = fileContext.getSymbolTableForFunction(decl)
-			functionContext.Name = decl.Name.Name
-
+			functionContext := GetFunctionContext(decl, fileContext)
 			analyser := &TimeAndSpaceComplexityAnalyser{}
-
 			for _, stmt := range decl.Body.List {
 				analyser.Visit(stmt, functionContext)
 			}
-
-			funcs = append(funcs, functionContext.GetFunctionInfo())
+			funcs = append(funcs, ParseContextToInfo(functionContext))
 		}
 	}
 
 	return funcs, nil
 }
 
-func AnalyseFunction(filePath string, functionName string) (FunctionInfo, error) {
-	src, err := os.ReadFile(filePath)
-	if err != nil {
-		return FunctionInfo{}, err
-	}
-	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, "", src, parser.AllErrors)
-	if err != nil {
-		return FunctionInfo{}, err
-	}
-
-	var fileContext FileContext
-
+func getFunctionInfoByName(file *ast.File, fileContext *FileContext, functionName string) (FunctionInfo, error) {
 	for _, declaration := range file.Decls {
 		switch decl := declaration.(type) {
-		case *ast.GenDecl:
-			for _, spec := range decl.Specs {
-				if valSpec, ok := spec.(*ast.ValueSpec); ok {
-					for _, identifier := range valSpec.Names {
-						fileContext.Globals = append(fileContext.Globals, identifier.Name)
-					}
-				}
-			}
 		case *ast.FuncDecl:
 			if isFunctionName(decl, functionName) {
-				functionContext := NewFunctionContext()
-				functionContext.SymbolTable = fileContext.getSymbolTableForFunction(decl)
-				functionContext.Name = decl.Name.Name
-
+				functionContext := GetFunctionContext(decl, fileContext)
 				analyser := &TimeAndSpaceComplexityAnalyser{}
-
 				for _, stmt := range decl.Body.List {
 					analyser.Visit(stmt, functionContext)
 				}
-
-				return functionContext.GetFunctionInfo(), nil
+				return ParseContextToInfo(functionContext), nil
 			}
-
-			
 		}
 	}
 	return FunctionInfo{}, errors.New("no such function in this file")
@@ -130,7 +106,7 @@ func (tscAnalyser *TimeAndSpaceComplexityAnalyser) Visit(node ast.Node, function
 			switch stmt.Args[0].(type) {
 			case *ast.ArrayType:
 				if size, ok := stmt.Args[1].(*ast.Ident); ok {
-					if functionContext.SymbolTable.IsParam(size.Name) {
+					if IsParam(size.Name, &functionContext.SymbolTable) {
 						functionContext.CurrentMalloc = 1 + functionContext.CurrentDepth
 					}
 				}
@@ -167,7 +143,7 @@ func (tscAnalyser *TimeAndSpaceComplexityAnalyser) Visit(node ast.Node, function
 				tscAnalyser.Visit(inner, functionContext)
 			}
 		case *ast.Ident:
-			if functionContext.SymbolTable.IsParam(iterator.Name) {
+			if IsParam(iterator.Name, &functionContext.SymbolTable) {
 				functionContext.CurrentDepth++
 				for _, inner := range stmt.Body.List {
 					tscAnalyser.Visit(inner, functionContext)
@@ -176,7 +152,7 @@ func (tscAnalyser *TimeAndSpaceComplexityAnalyser) Visit(node ast.Node, function
 			}
 
 		default:
-			if ExpressionContainsParam(condExpr, &functionContext.SymbolTable) {
+			if ExprContainsParam(condExpr, &functionContext.SymbolTable) {
 				functionContext.CurrentDepth++
 				for _, inner := range stmt.Body.List {
 					tscAnalyser.Visit(inner, functionContext)

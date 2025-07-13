@@ -2,8 +2,9 @@ package cmd
 
 import (
 	"fmt"
-	"funalyser/analyser/go"
+	analyser "funalyser/analyser/go"
 	"strconv"
+
 	"github.com/spf13/cobra"
 )
 
@@ -11,40 +12,28 @@ var fileAnalysis = &cobra.Command{
 	Use:   "analyse [file.go]",
 	Short: "Analyse functions in a Go source file",
 	Args:  cobra.ExactArgs(1),
-	Run: func(cmd *cobra.Command, args []string){
-		functionName, _ := cmd.Flags().GetString("func") 
-		if functionName != "" {
-			analyseFunction(args, functionName)
-		} else{
-			analyseFile(args)
-
+	Run: func(cmd *cobra.Command, args []string) {
+		functionName, _ := cmd.Flags().GetString("func")
+		funcsInfo, err := analyser.Analyse(args[0], functionName)
+		if err != nil {
+			fmt.Println("❌", err)
+			return
+		}
+		for _, fn := range funcsInfo {
+			printFunctionReport(fn)
 		}
 	},
 }
 
+// TODO: think of a set of commands and flags for the extended first verion functionality
+// TODO: think of making a parser speak via json to enable java parsing
+// 		- think if I need to do it now or in the future
+// TODO: polish everything
+// TODO: ask chatgpt what else I could also do
+
 func init() {
 	rootCmd.AddCommand(fileAnalysis)
 	rootCmd.PersistentFlags().String("func", "", "Name of the function to analyse")
-}
-
-func analyseFile(args []string) {
-	functionInfos, err := analyser.AnalyseFile(args[0])
-	if err != nil {
-		fmt.Println("Error:", err)
-		return
-	}
-	for _, fn := range functionInfos {
-		printFunctionReport(fn)
-	}
-}
-
-func analyseFunction(args []string, functionName string) {
-	functionInfo, err := analyser.AnalyseFunction(args[0], functionName)
-	if err != nil {
-		fmt.Println("Error:", err)
-		return
-	}
-	printFunctionReport(functionInfo)
 }
 
 func printFunctionReport(fn analyser.FunctionInfo) {

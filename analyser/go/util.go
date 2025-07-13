@@ -25,10 +25,6 @@ type FunctionContext struct {
 	RecursiveFanOut int
 }
 
-func NewFunctionContext() *FunctionContext {
-	return &FunctionContext{}
-}
-
 type FunctionInfo struct {
 	Name        string
 	Complexity  Complexity
@@ -36,7 +32,13 @@ type FunctionInfo struct {
 	FanOut      int
 }
 
-func (functionContext *FunctionContext) GetFunctionInfo() FunctionInfo {
+type SymbolTable struct {
+	Locals  []string
+	Params  []string
+	Globals []string
+}
+
+func ParseContextToInfo(functionContext *FunctionContext) FunctionInfo {
 	return FunctionInfo{
 		Name: functionContext.Name,
 		Complexity: Complexity{
@@ -48,51 +50,56 @@ func (functionContext *FunctionContext) GetFunctionInfo() FunctionInfo {
 	}
 }
 
-type SymbolTable struct {
-	Locals  []string
-	Params  []string
-	Globals []string
-}
+func GetFileContext(file *ast.File) FileContext {
+	var fileContext FileContext
 
-func (st *SymbolTable) IsParam(name string) bool {
-	for _, param := range st.Params {
-		if param == name {
-			return true
-		}
-	}
-	return false
-}
-
-func (analyser *FileContext) getSymbolTableForFunction(function *ast.FuncDecl) SymbolTable {
-	// var symbolTable SymbolTable
-	symbolTable := SymbolTable{
-		Globals: analyser.Globals,
-	}
-
-	// add parameters from the function AST
-	for _, params := range function.Type.Params.List {
-		for _, param := range params.Names {
-			symbolTable.Params = append(symbolTable.Params, param.Name)
-		}
-	}
-	// add short variable declarations (assignments) from the function AST
-	for _, stmt := range function.Body.List {
-		if assingStmt, ok := stmt.(*ast.AssignStmt); ok && assingStmt.Tok == token.DEFINE {
-			for _, exp := range assingStmt.Lhs {
-				if identifier, ok := exp.(*ast.Ident); ok {
-					symbolTable.Locals = append(symbolTable.Locals, identifier.Name)
+	for _, declaration := range file.Decls {
+		switch decl := declaration.(type) {
+		case *ast.GenDecl:
+			for _, spec := range decl.Specs {
+				if valSpec, ok := spec.(*ast.ValueSpec); ok {
+					for _, identifier := range valSpec.Names {
+						fileContext.Globals = append(fileContext.Globals, identifier.Name)
+					}
 				}
 			}
 		}
 	}
-	// add variable declarations from the function AST
-	for _, stmt := range function.Body.List {
+	return fileContext
+
+}
+
+func GetFunctionContext(decl *ast.FuncDecl, fileContext *FileContext) *FunctionContext {
+	functionContext := &FunctionContext{}
+	functionContext.Name = decl.Name.Name
+
+	functionContext.SymbolTable.Globals = fileContext.Globals
+
+
+	// add parameters
+	for _, params := range decl.Type.Params.List {
+		for _, param := range params.Names {
+			functionContext.SymbolTable.Params = append(functionContext.SymbolTable.Params, param.Name)
+		}
+	}
+	// add short variable declarations (assignments)
+	for _, stmt := range decl.Body.List {
+		if assingStmt, ok := stmt.(*ast.AssignStmt); ok && assingStmt.Tok == token.DEFINE {
+			for _, exp := range assingStmt.Lhs {
+				if identifier, ok := exp.(*ast.Ident); ok {
+					functionContext.SymbolTable.Locals = append(functionContext.SymbolTable.Locals, identifier.Name)
+				}
+			}
+		}
+	}
+	// add variable declarations
+	for _, stmt := range decl.Body.List {
 		if declStmt, ok := stmt.(*ast.DeclStmt); ok {
 			if genDecl, ok := declStmt.Decl.(*ast.GenDecl); ok && genDecl.Tok == token.VAR {
 				for _, spec := range genDecl.Specs {
 					if valueSpec, ok := spec.(*ast.ValueSpec); ok {
 						for _, identifier := range valueSpec.Names {
-							symbolTable.Locals = append(symbolTable.Locals, identifier.Name)
+							functionContext.SymbolTable.Locals = append(functionContext.SymbolTable.Locals, identifier.Name)
 						}
 					}
 				}
@@ -100,29 +107,7 @@ func (analyser *FileContext) getSymbolTableForFunction(function *ast.FuncDecl) S
 		}
 	}
 
-	return symbolTable
-}
-
-func ExpressionContainsParam(expr ast.Expr, symbolTable *SymbolTable) bool {
-	switch exp := expr.(type) {
-	case *ast.Ident:
-		return symbolTable.IsParam(exp.Name)
-	case *ast.CallExpr:
-		if funIdent, ok := exp.Fun.(*ast.Ident); ok && funIdent.Name == "len" {
-			if len(exp.Args) == 1 {
-				if argIdent, ok := exp.Args[0].(*ast.Ident); ok {
-					return symbolTable.IsParam(argIdent.Name)
-				}
-			}
-		}
-	case *ast.BinaryExpr:
-		return ExpressionContainsParam(exp.X, symbolTable) || ExpressionContainsParam(exp.Y, symbolTable)
-	case *ast.IndexExpr:
-		return ExpressionContainsParam(exp.X, symbolTable) || ExpressionContainsParam(exp.Index, symbolTable)
-	case *ast.ParenExpr:
-		return ExpressionContainsParam(exp.X, symbolTable)
-	}
-	return false
+	return functionContext
 }
 
 func GetRecursiveComplexity(expr *ast.CallExpr) (float32, float32) {
@@ -142,5 +127,36 @@ func GetRecursiveComplexity(expr *ast.CallExpr) (float32, float32) {
 }
 
 func isFunctionName(funcDecl *ast.FuncDecl, funcName string) bool {
-	return strings.ToLower(funcName) == strings.ToLower(funcDecl.Name.Name) 
+	return strings.ToLower(funcName) == strings.ToLower(funcDecl.Name.Name)
+}
+
+func IsParam(name string, symbolTable *SymbolTable) bool {
+	for _, param := range symbolTable.Params {
+		if param == name {
+			return true
+		}
+	}
+	return false
+}
+
+func ExprContainsParam(expr ast.Expr, symbolTable *SymbolTable) bool {
+	switch exp := expr.(type) {
+	case *ast.Ident:
+		return IsParam(exp.Name, symbolTable)
+	case *ast.CallExpr:
+		if funIdent, ok := exp.Fun.(*ast.Ident); ok && funIdent.Name == "len" {
+			if len(exp.Args) == 1 {
+				if argIdent, ok := exp.Args[0].(*ast.Ident); ok {
+					return IsParam(argIdent.Name, symbolTable)
+				}
+			}
+		}
+	case *ast.BinaryExpr:
+		return ExprContainsParam(exp.X, symbolTable) || ExprContainsParam(exp.Y, symbolTable)
+	case *ast.IndexExpr:
+		return ExprContainsParam(exp.X, symbolTable) || ExprContainsParam(exp.Index, symbolTable)
+	case *ast.ParenExpr:
+		return ExprContainsParam(exp.X, symbolTable)
+	}
+	return false
 }
