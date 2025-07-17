@@ -4,13 +4,12 @@ import (
 	"fmt"
 	analyser "funalyser/analyser/go"
 	"strconv"
-
 	"github.com/spf13/cobra"
 )
 
 var fileAnalysis = &cobra.Command{
 	Use:   "analyse [file.go]",
-	Short: "Analyse functions in a Go source file",
+	Short: "Analyse functions in a source file",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		functionName, _ := cmd.Flags().GetString("func")
@@ -25,6 +24,14 @@ var fileAnalysis = &cobra.Command{
 	},
 }
 
+var info = &cobra.Command{
+	Use:   "info",
+	Short: "Information about funalyser functionality and use cases",
+	Run: func(cmd *cobra.Command, args []string) {
+		printInfo()
+	},
+}
+
 // TODO: think of a set of commands and flags for the extended first verion functionality
 // TODO: think of making a parser speak via json to enable java parsing
 // 		- think if I need to do it now or in the future
@@ -33,6 +40,7 @@ var fileAnalysis = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(fileAnalysis)
+	rootCmd.AddCommand(info)
 	rootCmd.PersistentFlags().String("func", "", "Name of the function to analyse")
 }
 
@@ -86,4 +94,35 @@ func fanOutHint(fanOut int) string {
 		return "⚠️  Potentially exponential"
 	}
 	return ""
+}
+
+func printInfo() {
+	fmt.Println(`
+Funalyser – Code Complexity Analyser 
+
+This tool is designed with developers in mind to help them have a quick analysis of methods in a specific file
+
+🧠 Features:
+• Analyses time and space complexity of functions
+• Detects recursive patterns and fan-out factors
+• Tracks memory allocation (for example make and append)
+
+🔁 Recognises:
+• Linear/logarithmic recursion
+• Multiple recursive calls
+• Memory-intensive constructs
+
+✅ Currently supported languges:
+• Golang 
+• poteantial support of Java and other languages in the future
+
+🚀 Usage Examples:
+• funalyser analyse ./main.go
+	- gives an analysis for each function in the specified file 
+• funalyser analyse ./main.go --func MergeSort
+	- gives an analysis for a specific function in the file
+
+👤 Author: Danylo Piatyhorets
+📚 GitHub: https://github.com/DanyloPiatyhorets/funalyser
+	`)
 }
