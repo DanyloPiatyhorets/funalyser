@@ -7,7 +7,7 @@ import (
 
 func TestTimeComplexity(t *testing.T) {
 	file := "test_data/time_samples.go"
-	funcs, err := analyser.Process(file)
+	funcs, err := analyser.Analyse(file, "")
 
 	if err != nil {
 		t.Fatal(err)
@@ -26,7 +26,7 @@ func TestTimeComplexity(t *testing.T) {
 	}
 
 	for _, fn := range funcs {
-		got := fn.Complexity.TimeIndex
+		got := fn.Complexity.Time
 		want, ok := expected[fn.Name]
 		if !ok {
 			t.Errorf("No expected result for %s", fn.Name)

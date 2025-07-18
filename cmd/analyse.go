@@ -55,8 +55,8 @@ func printFunctionReport(fn analyser.FunctionInfo) {
 	if fn.FanOut > 0 {
 		fmt.Printf("  • Fan-out Factor:    %d %s\n", fn.FanOut, fanOutHint(fn.FanOut))
 	}
-	fmt.Printf("  • Time Complexity:   %s\n", parseComplexityIndexToString(fn.Complexity.TimeIndex))
-	fmt.Printf("  • Space Complexity:  %s\n", parseComplexityIndexToString(fn.Complexity.SpaceIndex))
+	fmt.Printf("  • Time Complexity:   %s\n", parseComplexityIndexToString(fn.Complexity.Time))
+	fmt.Printf("  • Space Complexity:  %s\n", parseComplexityIndexToString(fn.Complexity.Space))
 
 	if fn.FanOut > 1 {
 		fmt.Println("📌 Notes:")

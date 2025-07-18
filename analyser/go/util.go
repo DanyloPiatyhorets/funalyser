@@ -10,11 +10,6 @@ type FileContext struct {
 	Globals []string
 }
 
-type Complexity struct {
-	TimeIndex  float32
-	SpaceIndex float32
-}
-
 type FunctionContext struct {
 	Name            string
 	SymbolTable     SymbolTable
@@ -38,12 +33,18 @@ type SymbolTable struct {
 	Globals []string
 }
 
+type Complexity struct {
+	Time  float32
+	Space float32
+}
+
+
 func ParseContextToInfo(functionContext *FunctionContext) FunctionInfo {
 	return FunctionInfo{
 		Name: functionContext.Name,
-		Complexity: Complexity{
-			TimeIndex:  functionContext.MaxDepth,
-			SpaceIndex: functionContext.MaxMalloc,
+		Complexity: Complexity {
+			Time:  functionContext.MaxDepth,
+			Space: functionContext.MaxMalloc,
 		},
 		SymbolTable: functionContext.SymbolTable,
 		FanOut:      functionContext.RecursiveFanOut,
@@ -74,7 +75,6 @@ func GetFunctionContext(decl *ast.FuncDecl, fileContext *FileContext) *FunctionC
 	functionContext.Name = decl.Name.Name
 
 	functionContext.SymbolTable.Globals = fileContext.Globals
-
 
 	// add parameters
 	for _, params := range decl.Type.Params.List {
