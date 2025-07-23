@@ -2,110 +2,73 @@ package cmd
 
 import (
 	"fmt"
-	"funalyser/analyser/go"
+	analyser "funalyser/analyser/go"
 	"strconv"
 	"github.com/spf13/cobra"
 )
 
-var analyseCmd = &cobra.Command{
+var fileAnalysis = &cobra.Command{
 	Use:   "analyse [file.go]",
-	Short: "Analyse functions in a Go source file",
+	Short: "Analyse functions in a source file",
 	Args:  cobra.ExactArgs(1),
-	Run:   analyse,
+	Run: func(cmd *cobra.Command, args []string) {
+		functionName, _ := cmd.Flags().GetString("func")
+		funcsInfo, err := analyser.Analyse(args[0], functionName)
+		if err != nil {
+			fmt.Println("❌", err)
+			return
+		}
+		for _, fn := range funcsInfo {
+			printFunctionReport(fn)
+		}
+	},
 }
+
+var info = &cobra.Command{
+	Use:   "info",
+	Short: "Information about funalyser functionality and use cases",
+	Run: func(cmd *cobra.Command, args []string) {
+		printInfo()
+	},
+}
+
+// TODO: think of a set of commands and flags for the extended first verion functionality
+// TODO: think of making a parser speak via json to enable java parsing
+// 		- think if I need to do it now or in the future
+// TODO: polish everything
+// TODO: ask chatgpt what else I could also do
 
 func init() {
-	rootCmd.AddCommand(analyseCmd)
-}
-
-func analyse(cmd *cobra.Command, args []string) {
-	functions, err := analyser.Process(args[0])
-	if err != nil {
-		fmt.Println("Error:", err)
-		return
-	}
-	for _, fn := range functions {
-		printFunctionReport(fn)
-	}
+	rootCmd.AddCommand(fileAnalysis)
+	rootCmd.AddCommand(info)
+	rootCmd.PersistentFlags().String("func", "", "Name of the function to analyse")
 }
 
 func printFunctionReport(fn analyser.FunctionInfo) {
+	fmt.Println()
+	fmt.Println("───────────────────────────────────────────")
+	fmt.Printf("🔍 Function: %s\n", fn.Name)
+	fmt.Println("─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─")
 
-	spaceExpected := map[string]float32{
-    "constantSpace":         0,
-    "linearSpace":           1,
-    "linearAppend":          1,
-    "quadraticSpace":        2,
-    "allocationPerIteration": 1,
-    "recursiveStack":        1,
-    "tailRecursive":         1,
-    "fixedLoop":             0,
-    "multiInputAllocation":  1,
-    "mapSpace":              1,
-    "reuseBuffer":           1,
-    "conditionalAlloc":      1,
-    "fixedAlloc": 0,
-	"recurAlloc": 2,
-
-	}	
-
-	// Hardcoded timeExpected values
-	timeExpected := map[string]float32{
-		"addNumbers":      0,
-		"countToTen":      0,
-		"printItems":      1,
-		"nestedLoop":      2,
-		"loopForever":     0,
-		"labeledBreak":    2,
-		"conditionalLoop": 1,
-		"loopInSwitch":    1,
-		"recursion":       1,
+	fmt.Println("📊 Analysis Summary:")
+	fmt.Printf("  • Recursive:         %s\n", checkmark(fn.FanOut != 0))
+	if fn.FanOut > 0 {
+		fmt.Printf("  • Fan-out Factor:    %d %s\n", fn.FanOut, fanOutHint(fn.FanOut))
 	}
-	// spaceExpected := map[string]int{
-	// 	"addNumbers":       0,
-	// 	"countToTen":       0,
-	// 	"printItems":       1,
-	// 	"nestedLoop":       2,
-	// 	"loopForever":      0,
-	// 	"labeledBreak":     1,
-	// 	"conditionalLoop":  0,
-	// 	"loopInSwitch":     1,
-	// 	"hybridAlloc":      2,
-	// 	"appendDynamic":    2,
-	// }
+	fmt.Printf("  • Time Complexity:   %s\n", parseComplexityIndexToString(fn.Complexity.Time))
+	fmt.Printf("  • Space Complexity:  %s\n", parseComplexityIndexToString(fn.Complexity.Space))
 
-
-	expectedTC := timeExpected[fn.Name]
-	expectedSC := spaceExpected[fn.Name]
-
-	tcCorrect := fn.TimeComplexityIndex == expectedTC
-	scCorrect := fn.SpaceComplexityIndex == expectedSC
-
-	tcSymbol := "❌"
-	if tcCorrect {
-		tcSymbol = "✅"
+	if fn.FanOut > 1 {
+		fmt.Println("📌 Notes:")
+		fmt.Println("  • Multiple recursive calls detected (fan-out > 1).")
+		fmt.Println("    ➤ Consider checking if this leads to exponential growth.")
 	}
-	scSymbol := "❌"
-	if scCorrect {
-		scSymbol = "✅"
-	}
-	
 
-    fmt.Printf(
-    "Func: %-15s | Time: %-7s %s | Space: %-7s %s | FanOut=%d | Params: %v | Locals: %v | Globals: %v\n",
-    fn.Name,
-    parseIndexToTimeComplexity(fn.TimeComplexityIndex),
-    tcSymbol,
-    parseIndexToTimeComplexity(fn.SpaceComplexityIndex),
-    scSymbol,
-	fn.FanOut,
-    fn.SymbolTable.Params,
-    fn.SymbolTable.Locals,
-    fn.SymbolTable.Globals,
-)   
+	fmt.Println("───────────────────────────────────────────")
+	fmt.Println(" ")
 }
 
-func parseIndexToTimeComplexity(maxLoopDepth float32) string {
+func parseComplexityIndexToString(maxLoopDepth float32) string {
 	switch maxLoopDepth {
 	case 0:
 		return "O(1)"
@@ -117,4 +80,49 @@ func parseIndexToTimeComplexity(maxLoopDepth float32) string {
 		return "O(n*log n)"
 	}
 	return "O(n^" + strconv.Itoa(int(maxLoopDepth)) + ")"
+}
+
+func checkmark(ok bool) string {
+	if ok {
+		return "Yes"
+	}
+	return "No"
+}
+
+func fanOutHint(fanOut int) string {
+	if fanOut > 1 {
+		return "⚠️  Potentially exponential"
+	}
+	return ""
+}
+
+func printInfo() {
+	fmt.Println(`
+Funalyser – Code Complexity Analyser 
+
+This tool is designed with developers in mind to help them have a quick analysis of methods in a specific file
+
+🧠 Features:
+• Analyses time and space complexity of functions
+• Detects recursive patterns and fan-out factors
+• Tracks memory allocation (for example make and append)
+
+🔁 Recognises:
+• Linear/logarithmic recursion
+• Multiple recursive calls
+• Memory-intensive constructs
+
+✅ Currently supported languges:
+• Golang 
+• poteantial support of Java and other languages in the future
+
+🚀 Usage Examples:
+• funalyser analyse ./main.go
+	- gives an analysis for each function in the specified file 
+• funalyser analyse ./main.go --func MergeSort
+	- gives an analysis for a specific function in the file
+
+👤 Author: Danylo Piatyhorets
+📚 GitHub: https://github.com/DanyloPiatyhorets/funalyser
+	`)
 }
