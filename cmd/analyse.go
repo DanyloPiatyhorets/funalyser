@@ -2,7 +2,7 @@ package cmd
 
 import (
 	"fmt"
-	analyser "funalyser/analyser/go"
+	analyser "github.com/DanyloPiatyhorets/funalyser/analyser/go"
 	"strconv"
 	"github.com/spf13/cobra"
 )

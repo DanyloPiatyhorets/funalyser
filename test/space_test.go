@@ -1,7 +1,7 @@
 package test
 
 import (
-	analyser "funalyser/analyser/go"
+	analyser "github.com/DanyloPiatyhorets/funalyser/analyser/go"
 	"testing"
 )
 

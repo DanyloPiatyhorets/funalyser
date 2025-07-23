@@ -1,4 +1,4 @@
-module funalyser
+module github.com/DanyloPiatyhorets/funalyser
 
 go 1.24.0
 
