@@ -7,7 +7,8 @@
 ## 🪡 Simple Usage
 type `funalyser analyse` and add route to the file you want to get an analysis of. That's it 🙌
 
-gif
+![Demo animation](https://github.com/user-attachments/assets/350ac3cd-9ffb-4f3d-a3d3-81ea61f9a161)
+
 
 ## 🧰 Functionality
 
@@ -31,7 +32,14 @@ gif
 
 ### ⬇️ Download
 
-`go install https://github.com/DanyloPiatyhorets/funalyser@latest`
+- in your terminal, run `go install github.com/DanyloPiatyhorets/funalyser@latest`
+- try running `funalyser --help` 
+
+If your machine cannot find the tool, follow these steps:
+> This guide suggests altering your shell config
+- find and open your shell config (`~/.bashrc`, `~/.zshrc`, etc)
+- add this line to your exports `export PATH=$PATH:$(go env GOPATH)/bin`
+- source the config by running `source ~/.bashrc`
 
 ## 🛠️ Supported Languages
 - Goland
