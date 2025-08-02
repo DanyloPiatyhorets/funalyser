@@ -23,7 +23,7 @@ type `funalyser analyse` and add route to the file you want to get an analysis o
 `funalyser` has flags:
 
 - `--func` specify if you want an analysis for a specific function
-- `--json` [in development] outputs the analysis in json format 
+- `--json` outputs the analysis in json format 
 
 #### ⌨️ Usage:
 

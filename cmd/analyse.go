@@ -5,6 +5,7 @@ import (
 	analyser "github.com/DanyloPiatyhorets/funalyser/analyser/go"
 	"strconv"
 	"github.com/spf13/cobra"
+	"encoding/json"
 )
 
 var fileAnalysis = &cobra.Command{
@@ -13,13 +14,19 @@ var fileAnalysis = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		functionName, _ := cmd.Flags().GetString("func")
+		jsonFlag, _ := cmd.Flags().GetBool("json")
 		funcsInfo, err := analyser.Analyse(args[0], functionName)
 		if err != nil {
 			fmt.Println("❌", err)
 			return
-		}
-		for _, fn := range funcsInfo {
-			printFunctionReport(fn)
+		} else {
+			if jsonFlag {
+				outputJSON(funcsInfo)
+			} else {
+				for _, fn := range funcsInfo {
+					printFunctionReport(fn)
+				}
+			}
 		}
 	},
 }
@@ -32,16 +39,11 @@ var info = &cobra.Command{
 	},
 }
 
-// TODO: think of a set of commands and flags for the extended first verion functionality
-// TODO: think of making a parser speak via json to enable java parsing
-// 		- think if I need to do it now or in the future
-// TODO: polish everything
-// TODO: ask chatgpt what else I could also do
-
 func init() {
 	rootCmd.AddCommand(fileAnalysis)
 	rootCmd.AddCommand(info)
 	rootCmd.PersistentFlags().String("func", "", "Name of the function to analyse")
+	rootCmd.PersistentFlags().Bool("json", false, "Output the analysis in json format")
 }
 
 func printFunctionReport(fn analyser.FunctionInfo) {
@@ -121,8 +123,19 @@ This tool is designed with developers in mind to help them have a quick analysis
 	- gives an analysis for each function in the specified file 
 • funalyser analyse ./main.go --func MergeSort
 	- gives an analysis for a specific function in the file
+• funalyser analyse ./main.go --func MergeSort --json
+	- gives an analysis for a specific function in json format
 
 👤 Author: Danylo Piatyhorets
 📚 GitHub: https://github.com/DanyloPiatyhorets/funalyser
 	`)
+}
+
+func outputJSON(funcsInfo []analyser.FunctionInfo) {
+	jsonBytes, err := json.MarshalIndent(funcsInfo, "", "  ")
+	if err != nil {
+		fmt.Println("❌ Error encoding JSON:", err)
+		return
+	}
+	fmt.Println(string(jsonBytes))
 }
